@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     if (event.type === "setup_intent.succeeded") {
       const setupIntent = event.data.object;
 
-      const customerId = setupIntent.metadata.internalCustomerId;
+      const customerId = setupIntent.metadata?.internalCustomerId;
       const stripeCustomerId =
         typeof setupIntent.customer === "string"
           ? setupIntent.customer

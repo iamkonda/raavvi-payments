@@ -74,27 +74,29 @@ export async function POST(request: NextRequest) {
     }
 
     // Create the Stripe Customer.
+    
     const stripeCustomer = await stripe.customers.create(
-      {
-        name: customer.name,
-        email: customer.email,
-        phone: customer.phone || undefined,
+    {
+        name: customer.name ?? undefined,
+        email: customer.email ?? undefined,
+        phone: customer.phone ?? undefined,
         address: {
-          line1: customer.addressLine1,
-          line2: customer.addressLine2 || undefined,
-          city: customer.city,
-          postal_code: customer.postalCode,
-          country: customer.country,
+        line1: customer.addressLine1 ?? undefined,
+        line2: customer.addressLine2 ?? undefined,
+        city: customer.city ?? undefined,
+        postal_code: customer.postalCode ?? undefined,
+        country: customer.country ?? undefined,
         },
         metadata: {
-          internalCustomerId: customer.id,
-          source: "doclypdf.online",
+        internalCustomerId: customer.id,
+        source: "doclypdf.online",
         },
-      },
-      {
+    },
+    {
         idempotencyKey: `customer_${customer.id}`,
-      }
+    }
     );
+
 
     // Save the Stripe Customer ID in Neon.
     customer = await prisma.customer.update({
