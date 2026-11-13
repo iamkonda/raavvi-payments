@@ -1,0 +1,314 @@
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum CustomerStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+
+enum PaymentMethodType {
+  SEPA_DEBIT
+}
+
+enum PaymentMethodStatus {
+  ACTIVE
+  DETACHED
+  EXPIRED
+}
+
+enum MandateStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+  REVOKED
+}
+
+enum SubscriptionStatus {
+  PENDING
+  ACTIVE
+  PAST_DUE
+  UNPAID
+  PAUSED
+  CANCELED
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+}
+
+enum BillingInterval {
+  WEEK
+  MONTH
+  YEAR
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum PaymentType {
+  SUBSCRIPTION
+  ONE_TIME
+}
+
+enum InvoiceStatus {
+  DRAFT
+  OPEN
+  PAID
+  VOID
+  UNCOLLECTIBLE
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  SUPPORT
+  FINANCE
+}
+
+enum WebhookStatus {
+  RECEIVED
+  PROCESSED
+  FAILED
+}
+
+model Customer {
+  id                String         @id @default(cuid())
+  name              String
+  email             String         @unique
+  phone             String?
+  country           String?
+  city              String?
+  state             String?
+  postalCode        String?
+  addressLine1      String?
+  addressLine2      String?
+
+  stripeCustomerId  String?        @unique
+  status            CustomerStatus @default(ACTIVE)
+
+  paymentMethods    PaymentMethod[]
+  mandates          Mandate[]
+  subscriptions     Subscription[]
+  payments          Payment[]
+  invoices          Invoice[]
+
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model PaymentMethod {
+  id                  String              @id @default(cuid())
+  customerId          String
+  customer            Customer            @relation(fields: [customerId], references: [id])
+
+  stripePaymentMethodId String            @unique
+  type                PaymentMethodType   @default(SEPA_DEBIT)
+  status              PaymentMethodStatus @default(ACTIVE)
+
+  bankCountry         String?
+  last4               String?
+  fingerprint         String?
+  isDefault           Boolean             @default(false)
+
+  mandates            Mandate[]
+  subscriptions       Subscription[]
+  payments            Payment[]
+
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  @@index([customerId])
+  @@index([status])
+}
+
+model Mandate {
+  id                String        @id @default(cuid())
+  customerId        String
+  customer          Customer      @relation(fields: [customerId], references: [id])
+
+  paymentMethodId   String
+  paymentMethod     PaymentMethod @relation(fields: [paymentMethodId], references: [id])
+
+  stripeMandateId   String        @unique
+  status            MandateStatus @default(PENDING)
+
+  acceptanceType    String?
+  acceptedAt        DateTime?
+  acceptanceIp      String?
+  userAgent         String?
+  reference         String?
+
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([customerId])
+  @@index([paymentMethodId])
+  @@index([status])
+}
+
+model Subscription {
+  id                    String             @id @default(cuid())
+  customerId            String
+  customer              Customer           @relation(fields: [customerId], references: [id])
+
+  paymentMethodId       String
+  paymentMethod         PaymentMethod      @relation(fields: [paymentMethodId], references: [id])
+
+  stripeSubscriptionId  String             @unique
+
+  amount                Int
+  currency              String             @default("eur")
+  interval              BillingInterval
+  intervalCount         Int                @default(1)
+
+  status                SubscriptionStatus @default(PENDING)
+
+  startDate             DateTime?
+  currentPeriodStart    DateTime?
+  currentPeriodEnd      DateTime?
+  cancelAtPeriodEnd     Boolean            @default(false)
+  canceledAt            DateTime?
+  trialEnd              DateTime?
+
+  payments              Payment[]
+  invoices              Invoice[]
+
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  @@index([customerId])
+  @@index([paymentMethodId])
+  @@index([status])
+}
+
+model Payment {
+  id                    String        @id @default(cuid())
+  customerId            String
+  customer              Customer      @relation(fields: [customerId], references: [id])
+
+  paymentMethodId       String?
+  paymentMethod         PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
+
+  subscriptionId        String?
+  subscription          Subscription? @relation(fields: [subscriptionId], references: [id])
+
+  stripePaymentIntentId String?       @unique
+  stripeChargeId        String?       @unique
+
+  type                  PaymentType
+  status                PaymentStatus @default(PENDING)
+
+  amount                Int
+  currency              String        @default("eur")
+
+  failureCode           String?
+  failureMessage        String?
+  paidAt                DateTime?
+  refundedAmount        Int           @default(0)
+
+  invoice               Invoice?
+
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  @@index([customerId])
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Invoice {
+  id                String        @id @default(cuid())
+  customerId        String
+  customer          Customer      @relation(fields: [customerId], references: [id])
+
+  subscriptionId    String?
+  subscription      Subscription? @relation(fields: [subscriptionId], references: [id])
+
+  paymentId         String?       @unique
+  payment           Payment?      @relation(fields: [paymentId], references: [id])
+
+  stripeInvoiceId   String?       @unique
+
+  invoiceNumber     String        @unique
+  amount            Int
+  currency          String        @default("eur")
+
+  status            InvoiceStatus @default(DRAFT)
+  dueDate           DateTime?
+  paidAt            DateTime?
+
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([customerId])
+  @@index([subscriptionId])
+  @@index([status])
+}
+
+model AdminUser {
+  id             String    @id @default(cuid())
+  name           String
+  email          String    @unique
+  passwordHash   String
+  role           AdminRole @default(SUPPORT)
+  isActive       Boolean   @default(true)
+
+  auditLogs      AuditLog[]
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([role])
+}
+
+model AuditLog {
+  id          String    @id @default(cuid())
+  adminId     String?
+  admin       AdminUser? @relation(fields: [adminId], references: [id])
+
+  action      String
+  entity      String
+  entityId    String?
+  details     Json?
+  ipAddress   String?
+
+  createdAt   DateTime  @default(now())
+
+  @@index([adminId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
+
+model WebhookEvent {
+  id              String        @id @default(cuid())
+  stripeEventId   String        @unique
+  eventType       String
+  status          WebhookStatus @default(RECEIVED)
+  payload         Json?
+  processedAt     DateTime?
+  errorMessage    String?
+  attempts        Int           @default(0)
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([eventType])
+  @@index([status])
+}
